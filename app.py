@@ -7,7 +7,6 @@ import re
 app = Flask(__name__)
 CORS(app)
 
-# 🔐 Use ENV variable (IMPORTANT for deployment)
 HF_API_KEY = os.getenv("HF_TOKEN")
 
 API_URL = "https://router.huggingface.co/v1/chat/completions"
@@ -17,7 +16,6 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# 🧠 Chat memory (simple global memory)
 chat_history = [
     {
         "role": "system",
@@ -34,6 +32,9 @@ def clean_text(text):
     text = re.sub(r"- ", "", text)     # remove dash bullets
     return text.strip()
 
+@app.route("/")
+def index():
+    return "Hello World by nova ai"
 
 @app.route("/chat", methods=["POST"])
 def chat():
