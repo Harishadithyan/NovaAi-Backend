@@ -5,8 +5,11 @@ import os
 import re
 
 app = Flask(__name__)
-CORS(app)
 
+# ✅ Proper CORS setup
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# 🔐 HuggingFace API Key
 HF_API_KEY = os.getenv("HF_TOKEN")
 
 API_URL = "https://router.huggingface.co/v1/chat/completions"
@@ -16,6 +19,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
+# 🧠 Chat Memory
 chat_history = [
     {
         "role": "system",
@@ -25,20 +29,29 @@ chat_history = [
 
 # 🧹 CLEAN TEXT FUNCTION
 def clean_text(text):
-    text = re.sub(r"\*\*", "", text)   # remove bold **
-    text = re.sub(r"\*", "", text)     # remove *
-    text = re.sub(r"#+", "", text)     # remove ###
-    text = re.sub(r"`", "", text)      # remove `
-    text = re.sub(r"- ", "", text)     # remove dash bullets
+    text = re.sub(r"\*\*", "", text)
+    text = re.sub(r"\*", "", text)
+    text = re.sub(r"#+", "", text)
+    text = re.sub(r"`", "", text)
+    text = re.sub(r"- ", "", text)
     return text.strip()
 
-@app.route("/")
-def index():
-    return "Hello World by nova ai"
+# ✅ FORCE CORS HEADERS (IMPORTANT FOR RENDER)
+@app.after_request
+def apply_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
 
-@app.route("/chat", methods=["POST"])
+# 🚀 CHAT ENDPOINT
+@app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
     global chat_history
+
+    # ✅ Handle preflight request
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
 
     data = request.json
     user_message = data.get("message")
@@ -46,7 +59,7 @@ def chat():
     if not user_message:
         return jsonify({"reply": "No message provided"}), 400
 
-    # ➕ Add user message to memory
+    # ➕ Add user message
     chat_history.append({
         "role": "user",
         "content": user_message
@@ -54,8 +67,8 @@ def chat():
 
     payload = {
         "model": "meta-llama/Meta-Llama-3-8B-Instruct",
-        "messages": chat_history[-10:],   # 🔥 last 10 messages only
-        "max_tokens": 800,                # 🔥 longer response
+        "messages": chat_history[-10:],  # last 10 messages
+        "max_tokens": 800,
         "temperature": 0.7
     }
 
@@ -71,24 +84,22 @@ def chat():
         if "choices" in result:
             reply = result["choices"][0]["message"]["content"]
 
-            # ➕ Save AI response to memory
             chat_history.append({
                 "role": "assistant",
                 "content": reply
             })
 
-            # 🧹 Clean formatting
             cleaned_reply = clean_text(reply)
 
             return jsonify({"reply": cleaned_reply})
 
-        # ❌ HF API ERROR
+        # ❌ HF ERROR
         elif "error" in result:
             return jsonify({
                 "reply": f"HF ERROR: {result['error']['message']}"
             })
 
-        # ❌ UNKNOWN ERROR
+        # ❌ UNKNOWN
         else:
             return jsonify({
                 "reply": "Unexpected response from AI"
@@ -100,20 +111,30 @@ def chat():
         }), 500
 
 
-# 🔄 RESET CHAT (optional but useful)
-@app.route("/reset", methods=["POST"])
+# 🔄 RESET CHAT
+@app.route("/reset", methods=["POST", "OPTIONS"])
 def reset_chat():
     global chat_history
+
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
 
     chat_history = [
         {
             "role": "system",
-            "content": "You are a helpful AI. Give clear, detailed answers without markdown symbols like *, **, or bullet points."
+            "content": "You are a helpful AI. Give clear, detailed answers without using markdown symbols like *, **, or bullet points."
         }
     ]
 
     return jsonify({"message": "Chat reset successful"})
 
 
+# 🌍 ROOT CHECK (optional but useful)
+@app.route("/", methods=["GET"])
+def home():
+    return "API is running"
+
+
+# 🚀 RUN (Render uses gunicorn, so this is fallback)
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
